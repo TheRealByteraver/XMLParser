@@ -20,14 +20,16 @@ bool XMLFile::readFileToBuffer(
 }
 
 
-bool XMLFile::getTag( 
+bool XMLFile::extractFromStringStream(
     std::stringstream& rawData,
-    std::string& tagStr,
+    char startMarker,
+    char endMarker,
+    std::string& destStr,
     std::string& precedingStr,
     std::string& trailingStr )
 {
     trailingStr.clear();
-    tagStr.clear();
+    destStr.clear();
 
     // start reading where we left of
     std::string s( precedingStr );
@@ -40,13 +42,12 @@ bool XMLFile::getTag(
     // start looking for the '<' marker
     size_t pos1 = std::string::npos;
     for ( ; !rawData.eof(); ) {
-        pos1 = s.find( TAG_START_MARKER );
+        pos1 = s.find( startMarker );
         if ( pos1 == std::string::npos ) {
             precedingStr += s;
-        }
-        else { // we found the '<' marker!
-            // we copy the last characters preceding the marker
-            // to the preceding string:
+        } else { // we found the '<' marker!
+                 // we copy the last characters preceding the marker
+                 // to the preceding string:
             precedingStr += s.substr( 0,pos1 );
             // we continue with everything after the '<' marker,
             // including the marker itself:
@@ -61,10 +62,10 @@ bool XMLFile::getTag(
     if ( pos1 == std::string::npos )
         return false; // we didn't find a tag start marker
 
-    // start looking for the '>' marker
+                      // start looking for the '>' marker
     for ( ; !rawData.eof(); ) {
         // check if string contains a '>':
-        size_t pos2 = s.find( TAG_END_MARKER );
+        size_t pos2 = s.find( endMarker );
         if ( pos2 != std::string::npos ) {
             // the '>' marker might not be at the end of the string:
             if ( (int)pos2 != (s.length() - 1) ) {
@@ -73,10 +74,10 @@ bool XMLFile::getTag(
                 // cut off the excess characters but keep the '>' marker:
                 s.resize( pos2 + 1 );
             }
-            tagStr += s;
+            destStr += s;
             return true;
         }
-        tagStr += s;
+        destStr += s;
         rawData >> s;
         s += ' ';
     }
@@ -152,18 +153,126 @@ bool XMLFile::tagIsXMLVersionTag( std::string& tagStr )
         );
 }
 
+/* 
+    Returns true on success. Should only be used on real tags, not on xml
+    version tags or comments. Can be used on self-closing tags, but not on
+    closing tags obviously.
+*/
 bool XMLFile::extractTagNameAndAttributes( 
     std::string& tagStr,
     XMLElement& xmlElement )
 {
-    std::stringstream s( tagStr );
-    for ( ;!s.eof();) {
+    std::string s;
+    std::stringstream src( tagStr );
+
+    // extract tagname first:
+    src >> s;
+    size_t l = s.length();
+    if ( l < 2 )
+        return false;   
+    s = s.substr( 1 ); // skip initial '<' marker
+    l -= 2;
+    if ( s[l] == TAG_END_MARKER ) // trim end '>' marker if no attrib. present
+        s.resize( l );
+    if ( s.length() == 0 ) // tag name can't be empty
+        return false;
+    xmlElement.tag = s;
+    std::cout << "\nxmlElement tag : " << xmlElement.tag << "#"; // DEBUG
+
+    // and now the attributes:
+    XMLAttribute xmlAttribute;
+    s.clear();
+    for ( ;!src.eof();) {        
+        // First the attribute name. We look for the '=' marker
+        size_t pos1;
         std::string s2;
-        s >> s2;
-        std::cout 
-            << "\n" 
-            << s2
-            << "#";
+        for ( ;!src.eof();) {
+            src >> s2;
+            s += s2;
+            pos1 = s.find( ATTRIBUTE_ASSIGNMENT_MARKER );
+            if ( pos1 != std::string::npos )
+                break;
+        }
+        // attribute without assignment or value without attribute is invalid
+        if ( (pos1 == std::string::npos) || (pos1 == 0) ) 
+            return false;
+        xmlAttribute.name = s;
+        xmlAttribute.name.resize( pos1 );
+
+        std::cout << "\nattribute name : " << xmlAttribute.name << "#"; // DEBUG
+
+        if ( (pos1 + 1) >= s.length() )
+            s.clear();
+        else s = s.substr( pos1 + 1 ); // continue with what is left after '='
+
+        //std::cout << "\nLeftover for value: " << s << "#"; // DEBUG
+
+        // look for opening " (double quote) marker
+        /*        
+        if ( !src.eof() ) {
+            for ( ;!src.eof();) {
+                pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
+                if ( pos1 != std::string::npos )
+                    break;
+                src >> s2;
+                s += s2 + ' ';
+            }
+        }
+        else 
+            pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
+        */
+        pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
+        for ( ;(!src.eof()) && (pos1 == std::string::npos);) {
+            src >> s2;
+            s += s2 + ' ';
+            pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
+        }
+
+        if ( pos1 == std::string::npos )
+            return false; // attribute has no value which is illegal
+
+        //std::cout << ", pos1 = " << pos1;                  // DEBUG
+
+        s = s.substr( pos1 + 1 );  // trim everything before the initial "
+
+        //std::cout << "\nLeftover for value: " << s << "#"; // DEBUG
+
+        // look for closing " (double quote) marker
+        /*
+        for ( ;!src.eof();) {
+            pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
+            if ( pos1 != std::string::npos )
+                break;
+            std::string s2;
+            src >> s2;
+            s += ' ' + s2;
+        }
+        */
+        pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
+        for ( ;(!src.eof()) && (pos1 == std::string::npos);) {
+            src >> s2;
+            s += s2 + ' ';
+            pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
+        }
+
+        if ( pos1 == std::string::npos )
+            return false; // no closing " found which is illegal
+
+        s2 = s;
+        s2.resize( pos1 ); // we exclude the ending double quote
+        xmlAttribute.value = s2; // 2nd part of value ending with " 
+        if ( (pos1 + 1) < s.length() )
+            s = s.substr( pos1 + 1 );
+        else s.clear();
+        
+        xmlElement.attributes.push_back( xmlAttribute );
+        std::cout << "\nattribute value: " << xmlAttribute.value << "#\n"; // DEBUG
+        //_getch();
+                    
+        // we continue with whatever is left after the ending "
+        if ( (pos1 + 1) >= s.length() )
+            s.clear();
+        else s = s.substr( pos1 + 1 ); // continue with what is left after '='
     }
     return true;
 }
@@ -189,8 +298,13 @@ bool XMLFile::readFile()
     std::string previousTagValue;
 
     for ( ; !rawData.eof(); ) {
-        // read a tag (could be a whole element)     
-        getTag( rawData,tagStr,precedingStr,trailingStr );
+        // read a tag (could be a whole element)  
+        extractFromStringStream(
+            rawData,
+            TAG_START_MARKER,
+            TAG_END_MARKER,
+            tagStr,precedingStr,trailingStr );
+        //getTag( rawData,tagStr,precedingStr,trailingStr );
 
         // current XML element we are decoding:
         XMLElement  xmlElement;
@@ -214,6 +328,7 @@ bool XMLFile::readFile()
         // check if this tag is the xml version description
         bool isXMLVersion = tagIsXMLVersionTag( tagStr );
         
+        /*
         std::cout // DEBUG
             //<< "\nPreceding String: |" << precedingStr << "|"
             << "\nTag: |" << tagStr << "|"
@@ -223,7 +338,7 @@ bool XMLFile::readFile()
           //  << ", is comment valid: " << (isValidComment ? "Yes" : "No")
             << "\nIs a XML version tag: " << (isXMLVersion ? "Yes" : "No")
             << "\n";
-
+        */
         if ( isComment && (!isValidComment) )
             return false;
 

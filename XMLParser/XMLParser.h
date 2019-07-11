@@ -109,7 +109,7 @@
 #define XML_VERSION_MARKER              '?'
 #define COMMENT_TAG_MARKER              '!'
 #define ATTRIBUTE_ASSIGNMENT_MARKER     '='
-#define ATTRIBUTE_VALUE_DELIMITER       '\"'
+#define ATTRIBUTE_VALUE_DELIMITER       '"'
 #define COMMENT_START_MARKER            "<!--"
 #define COMMENT_END_MARKER              "-->"
 #define COMMENT_ILLEGAL_CONTENT         "--"
@@ -158,12 +158,10 @@ private:
         std::stringstream& rawData,
         std::string& filename );
 
-    // returns true if a comment was found
-    //bool                        skipComments( std::stringstream & rawData );
     /* 
-        This function reads anything between '<' and '>' from the stream and 
-        puts the tag, if found, in tagStr. The opening '<' and closing '>' 
-        are included.
+        This function reads anything between 'startMarker' and 'endMarker' 
+        from the stream and puts the contents, if found, in destStr. The 
+        opening ( e.g. '<') marker and closing marker (e.g. '>') are included.
         The string preceding the first tag found are stored in precedingStr.
         This string may contain spaces (so more than one word).
         The string trailingStr contains any character that immediately follow
@@ -176,9 +174,11 @@ private:
         string, where we left of with the previous tag search. If not empty,
         it SHOULD end with a space
     */
-    bool    getTag(
+    bool    extractFromStringStream(
         std::stringstream& rawData,
-        std::string& tagStr,
+        char startMarker,
+        char endMarker,
+        std::string& destStr,
         std::string& precedingStr,
         std::string& trailingStr );
 
