@@ -177,7 +177,7 @@ bool XMLFile::extractTagNameAndAttributes(
     if ( s.length() == 0 ) // tag name can't be empty
         return false;
     xmlElement.tag = s;
-    std::cout << "\nxmlElement tag : " << xmlElement.tag << "#"; // DEBUG
+    std::cout << "\n\nxmlElement tag : #" << xmlElement.tag << "#"; // DEBUG
 
     // and now the attributes:
     XMLAttribute xmlAttribute;
@@ -199,80 +199,53 @@ bool XMLFile::extractTagNameAndAttributes(
         xmlAttribute.name = s;
         xmlAttribute.name.resize( pos1 );
 
-        std::cout << "\nattribute name : " << xmlAttribute.name << "#"; // DEBUG
+        std::cout << "\n  attribute name : " << xmlAttribute.name << "=#"; // DEBUG
 
         if ( (pos1 + 1) >= s.length() )
             s.clear();
-        else s = s.substr( pos1 + 1 ); // continue with what is left after '='
-
-        //std::cout << "\nLeftover for value: " << s << "#"; // DEBUG
+        else 
+            s = s.substr( pos1 + 1 ); // continue with what is left after '='
 
         // look for opening " (double quote) marker
-        /*        
-        if ( !src.eof() ) {
-            for ( ;!src.eof();) {
-                pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
-                if ( pos1 != std::string::npos )
-                    break;
-                src >> s2;
-                s += s2 + ' ';
-            }
-        }
-        else 
-            pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
-        */
         pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
         for ( ;(!src.eof()) && (pos1 == std::string::npos);) {
             src >> s2;
             s += s2 + ' ';
             pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
         }
-
+        // attribute has no value which is illegal
         if ( pos1 == std::string::npos )
-            return false; // attribute has no value which is illegal
+            return false; 
 
-        //std::cout << ", pos1 = " << pos1;                  // DEBUG
-
-        s = s.substr( pos1 + 1 );  // trim everything before the initial "
-
-        //std::cout << "\nLeftover for value: " << s << "#"; // DEBUG
+        // trim everything before the initial "   // !!! values before " are illegal -> should fail
+        s = s.substr( pos1 + 1 ) + ' ';  
 
         // look for closing " (double quote) marker
-        /*
-        for ( ;!src.eof();) {
-            pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
-            if ( pos1 != std::string::npos )
-                break;
-            std::string s2;
-            src >> s2;
-            s += ' ' + s2;
-        }
-        */
         pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
         for ( ;(!src.eof()) && (pos1 == std::string::npos);) {
             src >> s2;
             s += s2 + ' ';
             pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
         }
-
         if ( pos1 == std::string::npos )
             return false; // no closing " found which is illegal
 
-        s2 = s;
-        s2.resize( pos1 ); // we exclude the ending double quote
-        xmlAttribute.value = s2; // 2nd part of value ending with " 
+        // we exclude the ending double quote
+        xmlAttribute.value = s;
+        xmlAttribute.value.resize( pos1 ); 
+
         if ( (pos1 + 1) < s.length() )
             s = s.substr( pos1 + 1 );
         else s.clear();
         
         xmlElement.attributes.push_back( xmlAttribute );
-        std::cout << "\nattribute value: " << xmlAttribute.value << "#\n"; // DEBUG
-        //_getch();
+        std::cout << xmlAttribute.value << "#"; // DEBUG
                     
         // we continue with whatever is left after the ending "
         if ( (pos1 + 1) >= s.length() )
             s.clear();
-        else s = s.substr( pos1 + 1 ); // continue with what is left after '='
+        else 
+            s = s.substr( pos1 + 1 ); // continue with what is left after '='
     }
     return true;
 }
