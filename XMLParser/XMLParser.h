@@ -5,6 +5,7 @@
     - reading CDATA sections (it skips them)
     - namespaces
     - probably a whole lot more
+    - keeping whitespace 100% as read (not needed for .SVG)
 
     Resources: 
     https://www.xml.com/pub/a/98/10/guide0.html
@@ -103,10 +104,11 @@
 */
 
 #define XML_FILE_MAX_LINE_LENGTH        256
-#define TAG_START_MARKER                '<'
-#define TAG_END_MARKER                  '>'
+#define TAG_START_MARKER                "<"
+#define TAG_END_MARKER                  ">"
 #define TAG_CLOSE_MARKER                '/'
-#define XML_VERSION_MARKER              '?'
+#define XML_VERSION_START_MARKER        "<?"
+#define XML_VERSION_END_MARKER          "?>"
 #define COMMENT_TAG_MARKER              '!'
 #define ATTRIBUTE_ASSIGNMENT_MARKER     '='
 #define ATTRIBUTE_VALUE_DELIMITER       '"'
@@ -115,17 +117,6 @@
 #define COMMENT_ILLEGAL_CONTENT         "--"
 #define CDATA_START_MARKER              "<![CDATA["
 #define CDATA_END_MARKER                "]]>"
-
-/*
-enum XMLReadState {
-    none,
-    //cdata,    // not supported for now
-    elementName,
-    elementValue,
-    attributeName,
-    attributeValue
-};
-*/
 
 class XMLAttribute {
 public:
@@ -138,7 +129,7 @@ public:
     std::string                 tag;
     std::string                 value;
     std::vector< XMLAttribute > attributes;
-    XMLElement                 *child = nullptr;
+    std::vector< XMLElement >   children;
 };
 
 class XMLFile {
@@ -151,8 +142,6 @@ public:
     bool    isLoaded() { return isLoaded_; }
 
 private:
-    char    *deleteWhiteSpace( char *buf ) const;
-
     // reads the .xml textfile into a stream of strings, returns false on error
     bool    readFileToBuffer( 
         std::stringstream& rawData,
@@ -171,30 +160,27 @@ private:
         - tagStr is cleared initially
         - trailingStr is cleared initially
         - precedingStr is NOT cleared, we start looking for a new tag in this
-        string, where we left of with the previous tag search. If not empty,
+        string, where we left off with the previous tag search. If not empty,
         it SHOULD end with a space
     */
     bool    extractFromStringStream(
         std::stringstream& rawData,
-        char startMarker,
-        char endMarker,
+        std::string startMarker,
+        std::string endMarker,
         std::string& destStr,
         std::string& precedingStr,
         std::string& trailingStr );
 
     /* 
-      returns true if the element is a comment. The bool isCommentValid is
+      returns true if the element is a comment. The bool isValidComment is
       set to false if there is a -- string in the comment (which is not 
       allowed).
     */
-    bool    tagIsAComment( 
-        std::string& tagStr,
-        bool & isValidComment );
-    bool    tagIsSelfClosing( std::string& tagStr );
-    bool    tagIsAClosingTag( std::string& tagStr );
-
-    bool    tagIsXMLVersionTag( std::string& tagStr );
-
+    bool    tagIsAComment( const std::string& tagStr,bool& isValidComment );
+    bool    tagIsSelfClosing( const std::string& tagStr );
+    bool    tagIsAClosingTag( const std::string& tagStr );
+    bool    tagIsXMLPrologTag( const std::string& tagStr );
+    bool    tagIsXMLVersionTag( const std::string& tagStr );
     bool    extractTagNameAndAttributes( 
         std::string& tagStr,
         XMLElement& xmlElement );
@@ -207,7 +193,7 @@ private:
     std::string                 filename_;
     std::string                 xmlVersion_;
     std::string                 xmlCharset_;
-    std::vector< XMLElement >   elements_;
+    XMLElement                  elements_;
 };
 
 
