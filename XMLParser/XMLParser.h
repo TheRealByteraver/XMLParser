@@ -6,6 +6,8 @@
     - namespaces
     - probably a whole lot more
     - keeping whitespace 100% as read (not needed for .SVG)
+    - tag names can only use characters in the 'A' .. 'z' range
+      for their first character
 
     Resources: 
     https://www.xml.com/pub/a/98/10/guide0.html
@@ -103,15 +105,17 @@
 
 */
 
-#define XML_FILE_MAX_LINE_LENGTH        256
+//#define XML_FILE_MAX_LINE_LENGTH        256
 #define TAG_START_MARKER                "<"
 #define TAG_END_MARKER                  ">"
-#define TAG_CLOSE_MARKER                '/'
+#define TAG_CLOSE_MARKER                "/"
 #define XML_VERSION_START_MARKER        "<?"
 #define XML_VERSION_END_MARKER          "?>"
-#define COMMENT_TAG_MARKER              '!'
-#define ATTRIBUTE_ASSIGNMENT_MARKER     '='
-#define ATTRIBUTE_VALUE_DELIMITER       '"'
+#define XML_SELF_CLOSING_MARKER         "/>"
+#define COMMENT_TAG_MARKER              "!"
+#define ATTRIBUTE_ASSIGNMENT_MARKER     "="
+#define ATTRIBUTE_VALUE_DELIMITER1      "'"
+#define ATTRIBUTE_VALUE_DELIMITER2      "\""
 #define COMMENT_START_MARKER            "<!--"
 #define COMMENT_END_MARKER              "-->"
 #define COMMENT_ILLEGAL_CONTENT         "--"

@@ -40,51 +40,46 @@ bool XMLFile::extractFromStringStream(
     }
     // start looking for the start marker (e.g. '<')
     size_t pos1 = s.find( startMarker );
-    for ( ; (!rawData.eof()); ) {
-        if ( pos1 != std::string::npos ) { 
-            // we found the start marker!
-            // we copy the last characters preceding the marker
-            // to the preceding string. This is usually the value
-            // of the preceding element.
-            precedingStr += s.substr( 0,pos1 );
-            // we continue with everything after the start marker,
-            // including the marker itself:
-            s = s.substr( pos1 );
-            break; // we are done here                   
-        } 
-        else { 
-            precedingStr += s;
-            rawData >> s;
-            s += ' ';
-            pos1 = s.find( startMarker );
-        }
+    for ( ; (rawData.eof() == false) && (pos1 == std::string::npos); ) {        
+        precedingStr += s;
+        rawData >> s;
+        s += ' ';
+        pos1 = s.find( startMarker );
     }
     // we didn't find a tag start marker: exit with error
     if ( pos1 == std::string::npos )
         return false; 
 
+    // we found the start marker! We copy the last characters preceding the 
+    // marker to the preceding string. This is usually the value of the 
+    // preceding element.
+    precedingStr += s.substr( 0,pos1 );
+    // we continue with everything after the start marker,
+    // including the marker itself:
+    s = s.substr( pos1 );
+
     // start looking for the end marker (e.g. '>')
     size_t pos2 = s.find( endMarker );
-    for ( ; !rawData.eof(); ) {
+    for ( ; (rawData.eof() == false) && (pos2 == std::string::npos); ) {
+        destStr += s;
+        rawData >> s;
+        s += ' ';
         pos2 = s.find( endMarker );
-        if ( pos2 != std::string::npos ) {
-            // the '>' marker might not be at the end of the string:
-            if ( pos2 != (s.length() - endMarker.length()) ) {
-                // exclude the '>' character for the trailing string:
-                trailingStr = s.substr( pos2 + endMarker.length() );
-                // cut off the excess characters but keep the '>' marker:
-                s.resize( pos2 + endMarker.length() );
-            }
-            destStr += s;
-            return true;
-        }
-        else {
-            destStr += s;
-            rawData >> s;
-            s += ' ';
-        }
     }
-    return false;
+    // we didn't find a tag end marker: exit with error
+    if ( pos2 == std::string::npos )
+        return false;
+
+    // we found the end marker!
+    // check if the end marker (e.g. '>') is at the end of the string:
+    if ( pos2 != (s.length() - endMarker.length()) ) {
+        // exclude the end marker from the trailing string:
+        trailingStr = s.substr( pos2 + endMarker.length() );
+        // cut off the excess characters but keep the end marker:
+        s.resize( pos2 + endMarker.length() );
+    }
+    destStr += s;
+    return true;
 }
 
 bool XMLFile::tagIsAComment( const std::string& tagStr, bool& isValidComment )
@@ -138,7 +133,7 @@ bool XMLFile::tagIsSelfClosing( const std::string& tagStr )
     size_t l = tagStr.length();
     if ( l < 4 ) // ? min size = '<a b="c"/>' --> 10 chars?
         return false;
-    return (tagStr[l - 2] == TAG_CLOSE_MARKER);
+    return (tagStr[l - 2] == TAG_CLOSE_MARKER[0] );
 }
 
 bool XMLFile::tagIsAClosingTag( const std::string& tagStr )
@@ -146,7 +141,7 @@ bool XMLFile::tagIsAClosingTag( const std::string& tagStr )
     size_t l = tagStr.length();
     if ( l < 4 )
         return false;
-    return (tagStr[1] == TAG_CLOSE_MARKER);
+    return (tagStr[1] == TAG_CLOSE_MARKER[0] );
 }
 
 bool XMLFile::tagIsXMLPrologTag( const std::string& tagStr )
@@ -193,30 +188,59 @@ bool XMLFile::tagIsXMLVersionTag( const std::string& tagStr )
 }
 
 /* 
-    Returns true on success. Should only be used on real tags, not on the "xml
-    version" prolog or comments. Can be used on self-closing tags, but not on
-    closing tags obviously.
+    This procedure will fill up the parameter "xmlElement" with the tag and 
+    the list with attribute & attribute value sets. Noteworthy here is that
+    if the tag is a closing tag, the name of the tag will include the '/'.
+    For example, if the tag is </closedTag>, this function will set the tag 
+    name to "/closedTag" (excluding the quotes).
+
+    - Returns true on success. 
+    - Returns false if the tag is malformed. This should cause the XML parser
+      to stop decoding the file.
 */
 bool XMLFile::extractTagNameAndAttributes( 
     std::string& tagStr,
     XMLElement& xmlElement )
-{
-    std::string s;
-    std::stringstream src( tagStr );
+{    
+    // closing tags have no attributes, so we only extract the tag
+    bool isClosingTag = tagIsAClosingTag( tagStr );
 
-    // extract tagname first:
-    src >> s;
-    size_t l = s.length();
-    if ( l < 2 )
-        return false;   
-    s = s.substr( 1 ); // skip initial '<' marker
-    l -= 2;
-    if ( s[l] == TAG_END_MARKER[0] ) // trim end '>' marker if no attrib. present
-        s.resize( l );
-    if ( s.length() == 0 ) // tag name can't be empty
+    std::string s, s2;
+    std::stringstream src( tagStr );
+    src >> s2;
+    bool isProlog = tagIsXMLPrologTag( tagStr );
+    if ( isProlog ) { 
+        s = s2.substr( 2 );
+    }
+    else { 
+        if ( s2.length() == 0 ) {
+            std::cout << "\nTag is empty!";
+            return false;
+        }
+        s = s2.substr( 1 );
+    }
+    // tag should follow start marker (e.g. '<') immediately
+    if ( s.length() == 0 ) {
+        std::cout << "\nTag does not immediately follow tag start marker!";
         return false;
+    }
+
+    // defective tag: first char must be a letter
+    if ( !isalpha( s[isClosingTag ? 1 : 0] ) ) {
+        std::cout << "\nTag starts with an illegal character '"
+            << s[isClosingTag ? 1 : 0] << "'";
+        return false;
+    }
+
+    // strip the closing markers if the tag has no attributes:
     xmlElement.tag = s;
-    //std::cout << "\n\nxmlElement tag : #" << xmlElement.tag << "#"; // DEBUG
+    int l = xmlElement.tag.length() - 1;
+    if ( xmlElement.tag[l] == TAG_END_MARKER[0] ) {
+        xmlElement.tag.resize(  
+            tagIsSelfClosing( tagStr ) ? (l - 1) : l
+        );            
+        return true;
+    }
 
     // and now the attributes:
     XMLAttribute xmlAttribute;
@@ -233,8 +257,25 @@ bool XMLFile::extractTagNameAndAttributes(
                 break;
         }
         // attribute without assignment or value without attribute is invalid
-        if ( (pos1 == std::string::npos) || (pos1 == 0) ) 
+        // just make sure we are not analysing the prolog end marker
+        if ( pos1 == std::string::npos ) { // no '=' marker found
+            // posibilities:
+            // - we encountered a closing tag like />, ?>, >, etc
+            // error in xml markup
+            //std::cout << "\nLeftover: " << s << "#";
+            if ( (s == XML_VERSION_END_MARKER) || 
+                (s == XML_SELF_CLOSING_MARKER) ||
+                (s == TAG_END_MARKER) 
+                )
+                return true;
+            std::cout << "\nIllegal end marker found!"; // <<<<!!!!!!!!! here
             return false;
+        }
+        if ( pos1 == 0 ) {// attribute value without attribute is illegal
+            std::cout << "\nFound attribute value without attribute name!";
+            return false;
+        }
+
         xmlAttribute.name = s;
         xmlAttribute.name.resize( pos1 );
 
@@ -246,15 +287,17 @@ bool XMLFile::extractTagNameAndAttributes(
             s = s.substr( pos1 + 1 ); // continue with what is left after '='
 
         // look for opening " (double quote) marker
-        pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
+        pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER2 );
         for ( ;(!src.eof()) && (pos1 == std::string::npos);) {
             src >> s2;
             s += s2 + ' ';
-            pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
+            pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER2 );
         }
         // attribute has no value which is illegal
-        if ( pos1 == std::string::npos )
-            return false; 
+        if ( pos1 == std::string::npos ) {
+            std::cout << "\n";
+            return false;
+        }
 
         // values between '=' and " are illegal therefor we check for it
         if ( pos1 > 0 ) { 
@@ -268,14 +311,16 @@ bool XMLFile::extractTagNameAndAttributes(
         s = s.substr( pos1 + 1 ) + ' ';  
 
         // look for closing " (double quote) marker
-        pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
+        pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER2 );
         for ( ;(!src.eof()) && (pos1 == std::string::npos);) {
             src >> s2;
             s += s2 + ' ';
-            pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER );
+            pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER2 );
         }
-        if ( pos1 == std::string::npos )
+        if ( pos1 == std::string::npos ) {
+            std::cout << "\nCouldn't find a closing marker for the attribute value!";
             return false; // no closing " found which is illegal
+        }
 
         // we exclude the ending double quote
         xmlAttribute.value = s;
@@ -314,13 +359,6 @@ bool XMLFile::readFile()
         Start of XML file decoding
         **************************
     */
-    /*
-    for ( ; !rawData.eof(); ) {
-        rawData >> precedingStr;
-        std::cout << precedingStr << " ";
-    }
-    */
-
     for ( ; (!rawData.eof()); ) {
         // read a tag (could be a whole element)  
         extractFromStringStream(
@@ -361,7 +399,6 @@ bool XMLFile::readFile()
                 std::cout << "\nError extracting attributes, exiting!\n";
                 return false;
             }
-
             for ( XMLAttribute xmlAttribute : xmlElement.attributes ) {
                 if ( xmlAttribute.name == "version" )
                     xmlVersion_ = xmlAttribute.value;
@@ -390,12 +427,23 @@ bool XMLFile::readFile()
 
         // OK so we are done with filtering prolog stuff and comments,
         // now start with reading the xml elements
+
         XMLElement xmlElement;
-        extractTagNameAndAttributes( tagStr,xmlElement );
+        bool extractError = extractTagNameAndAttributes( tagStr,xmlElement );
+        if ( extractError == false )
+            return false; // exit on decoding error
+
+        // whatever precedes the closing tag is the value inside the element:
         if ( tagIsAClosingTag( tagStr ) ) {
             xmlElement.value = precedingStr;
+            // trim the trailing space:
+            int l = xmlElement.value.length();
+            if ( l >= 1 ) {
+                l--;
+                if ( xmlElement.value[l] == ' ' )
+                    xmlElement.value.resize( l );
+            }
         }
-
 
         // DEBUG **************************************************************
         if ( !tagIsAClosingTag( tagStr ) ) {
