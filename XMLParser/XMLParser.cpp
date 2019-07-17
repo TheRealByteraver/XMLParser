@@ -247,7 +247,7 @@ bool XMLFile::extractTagNameAndAttributes(
     s.clear();
     for ( ;!src.eof();) {        
         // First the attribute name. We look for the '=' marker
-        size_t pos1;
+        size_t pos1 = std::string::npos;
         std::string s2;
         for ( ;!src.eof();) {
             src >> s2;
@@ -262,16 +262,14 @@ bool XMLFile::extractTagNameAndAttributes(
             // posibilities:
             // - we encountered a closing tag like />, ?>, >, etc
             // error in xml markup
-            //std::cout << "\nLeftover: " << s << "#";
             if ( (s == XML_VERSION_END_MARKER) || 
                 (s == XML_SELF_CLOSING_MARKER) ||
-                (s == TAG_END_MARKER) 
-                )
+                (s == TAG_END_MARKER) )
                 return true;
-            std::cout << "\nIllegal end marker found!"; // <<<<!!!!!!!!! here
+            std::cout << "\nIllegal end marker found!"; 
             return false;
         }
-        if ( pos1 == 0 ) {// attribute value without attribute is illegal
+        if ( pos1 == 0 ) { // attribute value without attribute is illegal
             std::cout << "\nFound attribute value without attribute name!";
             return false;
         }
@@ -286,16 +284,36 @@ bool XMLFile::extractTagNameAndAttributes(
         else 
             s = s.substr( pos1 + 1 ); // continue with what is left after '='
 
-        // look for opening " (double quote) marker
-        pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER2 );
+        // look for opening " or ' (double or single quote) marker
+        size_t pos2;
+        std::string valueDelimiter;
+        pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER1 );
+        pos2 = s.find( ATTRIBUTE_VALUE_DELIMITER2 );
+        if ( pos1 != std::string::npos ) {
+            if ( pos2 != std::string::npos ) {
+                valueDelimiter = (pos1 < pos2) ?
+                    ATTRIBUTE_VALUE_DELIMITER1 :
+                    ATTRIBUTE_VALUE_DELIMITER2;
+            } else
+                valueDelimiter = ATTRIBUTE_VALUE_DELIMITER1;
+        } else {
+            if ( pos2 != std::string::npos )
+                valueDelimiter = ATTRIBUTE_VALUE_DELIMITER2;
+            else {
+                std::cout << "\nCharacters found between '=' and (double) quote attribute value delimiter!";
+                return false;
+            }
+        }
+        if ( valueDelimiter == ATTRIBUTE_VALUE_DELIMITER2 )
+            pos1 = pos2;
         for ( ;(!src.eof()) && (pos1 == std::string::npos);) {
             src >> s2;
             s += s2 + ' ';
-            pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER2 );
+            pos1 = s.find( valueDelimiter );
         }
         // attribute has no value which is illegal
         if ( pos1 == std::string::npos ) {
-            std::cout << "\n";
+            std::cout << "\nAttribute without value found!";
             return false;
         }
 
@@ -311,11 +329,11 @@ bool XMLFile::extractTagNameAndAttributes(
         s = s.substr( pos1 + 1 ) + ' ';  
 
         // look for closing " (double quote) marker
-        pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER2 );
+        pos1 = s.find( valueDelimiter );
         for ( ;(!src.eof()) && (pos1 == std::string::npos);) {
             src >> s2;
             s += s2 + ' ';
-            pos1 = s.find( ATTRIBUTE_VALUE_DELIMITER2 );
+            pos1 = s.find( valueDelimiter );
         }
         if ( pos1 == std::string::npos ) {
             std::cout << "\nCouldn't find a closing marker for the attribute value!";
