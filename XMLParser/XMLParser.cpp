@@ -136,6 +136,7 @@ bool XMLFile::tagIsSelfClosing( const std::string& tagStr )
     return (tagStr[l - 2] == TAG_CLOSE_MARKER[0] );
 }
 
+// Will return false on self-closing tags!
 bool XMLFile::tagIsAClosingTag( const std::string& tagStr )
 {
     size_t l = tagStr.length();
@@ -214,8 +215,9 @@ bool XMLFile::extractTagNameAndAttributes(
     }
     else { 
         if ( s2.length() == 0 ) {
-            std::cout << "\nTag is empty!";
+            std::cout << "\nTag '" << tagStr << "' is empty!";
             return false;
+            //return true;
         }
         s = s2.substr( 1 );
     }
@@ -372,12 +374,19 @@ bool XMLFile::readFile()
     std::string previousTagValue;
 
     int lineNr = 0;
-    /*
-        **************************
+
+    // keep track of how deep into the tree we go:
+    int stackIndex = 0; // nr of items on the stack minus one
+    std::stack< XMLElement* > xmlElementPtrStack;
+    XMLElement *prevXMLPtr = &elements_;
+
+    // true when we found the final closing tag
+    bool finishedReading = false; 
+
+    /*********************************
         Start of XML file decoding
-        **************************
-    */
-    for ( ; (!rawData.eof()); ) {
+    **********************************/
+    for ( ; (!rawData.eof()) && (!finishedReading); ) {
         // read a tag (could be a whole element)  
         extractFromStringStream(
             rawData,
@@ -445,14 +454,16 @@ bool XMLFile::readFile()
 
         // OK so we are done with filtering prolog stuff and comments,
         // now start with reading the xml elements
-
         XMLElement xmlElement;
         bool extractError = extractTagNameAndAttributes( tagStr,xmlElement );
         if ( extractError == false )
             return false; // exit on decoding error
 
+        bool isClosingTag = tagIsAClosingTag( tagStr );
+        bool isSelfClosingTag = tagIsSelfClosing( tagStr );
+
         // whatever precedes the closing tag is the value inside the element:
-        if ( tagIsAClosingTag( tagStr ) ) {
+        if ( isClosingTag ) {
             xmlElement.value = precedingStr;
             // trim the trailing space:
             int l = xmlElement.value.length();
@@ -462,39 +473,118 @@ bool XMLFile::readFile()
                     xmlElement.value.resize( l );
             }
         }
-
-        // DEBUG **************************************************************
-        if ( !tagIsAClosingTag( tagStr ) ) {
-            std::cout << "\n<" << xmlElement.tag;
-            for ( unsigned i = 0; i < xmlElement.attributes.size(); i++ ) {
-                std::cout << " "
-                    << xmlElement.attributes[i].name << "=\""
-                    << xmlElement.attributes[i].value << "\"";
-            }
-            std::cout << ">";
-        }
-        else { 
-            if ( !tagIsSelfClosing( tagStr ) )
-                std::cout << xmlElement.value << "<" << xmlElement.tag << ">";
-            else {
-                std::cout << "\n<" << xmlElement.tag;
-                for ( unsigned i = 0; i < xmlElement.attributes.size(); i++ ) {
-                    std::cout << " "
-                        << xmlElement.attributes[i].name << "=\""
-                        << xmlElement.attributes[i].value << "\"";
-                }
-                std::cout << " />";
-            }
-        }
-        // END DEBUG **********************************************************/
-
-
-
+        // Prepare for next tag read:
         precedingStr = trailingStr;
+
+        // *****************************************************
+        // Now load the xml file into the memory tree structure:
+        // *****************************************************
+        if ( !isClosingTag ) { // found opening tag
+            if ( !isSelfClosingTag ) { 
+                if ( stackIndex == 0 ) { // found the initial opening tag  
+                    // assign opening tag and attributes to the root tag
+                    *prevXMLPtr = xmlElement;
+                }
+                else { 
+                    // we are not dealing with the root tag but with child tag:
+                    prevXMLPtr->children.push_back( xmlElement );                
+
+                    // save the pointer and go inside the child xmlElement:
+                    xmlElementPtrStack.push( prevXMLPtr );
+
+                    // we switch to the newly created child XMLElement:
+                    prevXMLPtr = &(prevXMLPtr->children.back());
+                }
+                // we keep track of where we are in the tree:
+                stackIndex++;
+            }
+            else { // tag is selfclosing
+                prevXMLPtr->children.push_back( xmlElement );
+            }
+
+            // debug **********************************************************
+            std::cout << "\n<" << xmlElement.tag;
+            for ( unsigned i = 0; i < xmlElement.attributes.size(); i++ )
+                std::cout << " " << xmlElement.attributes[i].name
+                << "=\"" << xmlElement.attributes[i].value << "\"";
+            if ( isSelfClosingTag )
+                std::cout << "/";
+            std::cout << ">";
+            // end debug *****************************************************/
+        }
+        else { // tag is a closing tag //or selfclosing tag
+            if ( isSelfClosingTag )
+                std::cout << "\nSelf closing tag found in unexpected area!"; // DEBUG
+
+            // check if the closing tag corresponds to the opening tag of
+            // the current tag we are working on. First we must               
+            // remove the '/' character from the closing tag:
+            std::string closingTag = xmlElement.tag.substr( 1 );
+            if ( prevXMLPtr->tag != closingTag ) {
+                std::cout << "\nClosing and Opening tags do not match!";
+                return false;
+            }
+
+            // the only thing left to add is the value of the element now
+            // that it is closed:
+            prevXMLPtr->value = xmlElement.value;
+
+            // now we go back to the previous element:
+            if ( stackIndex > 1 ) {
+                prevXMLPtr = xmlElementPtrStack.top();
+                xmlElementPtrStack.pop();
+                stackIndex--;
+            }
+            else {                
+                finishedReading = true;
+            }
+            // debug
+            std::cout 
+                << xmlElement.value
+                << "<" << xmlElement.tag << ">";
+            if( finishedReading )
+                std::cout << "\nParsing of xml file finished!";
+            // end debug
+        }
     }
     return true;
 }
 
+// this function is recursive!
+void XMLFile::printXMLElement( XMLElement& xmlElement )
+{
+    // display valueless tags as self-closing
+    bool makeSelfClosing = 
+        (xmlElement.value.length() == 0) && 
+        (xmlElement.children.size() == 0);
+    bool hasAttributes = xmlElement.attributes.size() > 0;
+
+    std::cout << "\n<" << xmlElement.tag;
+    if ( hasAttributes ) {
+        for ( XMLAttribute xmlAttribute : xmlElement.attributes ) {
+            std::cout
+                << " " << xmlAttribute.name << "=\""
+                << xmlAttribute.value << "\"";
+        }
+    }
+    if ( !makeSelfClosing ) {
+        std::cout << (hasAttributes ? ">\n" : ">");
+        for ( XMLElement xmlElement : xmlElement.children ) {
+            printXMLElement( xmlElement );
+        }
+        std::cout << xmlElement.value << (hasAttributes ? "\n" : "")
+            << "</" << xmlElement.tag << ">";
+    }
+    else
+        std::cout << " />"; 
+}
+
+void XMLFile::print()
+{
+    if (!isLoaded_ )
+        return;
+    printXMLElement( elements_ );
+}
 
 void main()
 {
@@ -504,6 +594,9 @@ void main()
         << "\nXML file was loaded correctly: "
         << (xmlFile.isLoaded() ? "yes" : "no") << "\n";
 
+    xmlFile.print();
+
+
     _getch();
     
     XMLFile     xmlFile2( "c:\\RTSMedia\\purchase.xml" );
@@ -511,6 +604,7 @@ void main()
         << "\nXML file was loaded correctly: "
         << (xmlFile2.isLoaded() ? "yes" : "no") << "\n";
 
+    xmlFile2.print();
     _getch();
 }
 

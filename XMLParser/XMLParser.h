@@ -2,7 +2,8 @@
     The purpose of this very simple XML parser is to be able to read .SVG 
     files, nothing more. 
     Not implemented are:
-    - reading CDATA sections (it skips them)
+    - reading CDATA sections 
+    - support for &lt; &gt; &amp; &apos; &quot;
     - namespaces
     - probably a whole lot more
     - keeping whitespace 100% as read (not needed for .SVG)
@@ -144,6 +145,8 @@ public:
         isLoaded_ = readFile(); 
     }
     bool    isLoaded() { return isLoaded_; }
+    void    print();
+    void    printXMLElement( XMLElement& xmlElement );
 
 private:
     // reads the .xml textfile into a stream of strings, returns false on error
