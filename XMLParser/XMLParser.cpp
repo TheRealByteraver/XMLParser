@@ -551,39 +551,50 @@ bool XMLFile::readFile()
 }
 
 // this function is recursive!
-void XMLFile::printXMLElement( XMLElement& xmlElement )
+void XMLFile::printXMLElement( const XMLElement& xmlElement,int depth )
 {
-    // display valueless tags as self-closing
-    bool makeSelfClosing = 
-        (xmlElement.value.length() == 0) && 
-        (xmlElement.children.size() == 0);
+    const char *spacer = "   ";
     bool hasAttributes = xmlElement.attributes.size() > 0;
+    bool hasChildren = (xmlElement.children.size() > 0);
+    // display valueless tags as self-closing
+    bool makeSelfClosing = (xmlElement.value.length() == 0) && (!hasChildren);
 
-    std::cout << "\n<" << xmlElement.tag;
-    if ( hasAttributes ) {
-        for ( XMLAttribute xmlAttribute : xmlElement.attributes ) {
-            std::cout
-                << " " << xmlAttribute.name << "=\""
-                << xmlAttribute.value << "\"";
-        }
+    std::cout << "\n";
+    for ( int i = 0; i < depth; i++ )
+        std::cout << spacer;
+    std::cout << "<" << xmlElement.tag;
+    for ( XMLAttribute xmlAttribute : xmlElement.attributes ) {
+        std::cout
+            << " " << xmlAttribute.name << "=\""
+            << xmlAttribute.value << "\"";
     }
-    if ( !makeSelfClosing ) {
-        std::cout << (hasAttributes ? ">\n" : ">");
+    if ( makeSelfClosing ) 
+        std::cout << " />";
+    else {
+        std::cout << ((hasAttributes && !hasChildren) ? ">\n" : ">");
         for ( XMLElement xmlElement : xmlElement.children ) {
-            printXMLElement( xmlElement );
+            printXMLElement( xmlElement,depth + 1 );
         }
-        std::cout << xmlElement.value << (hasAttributes ? "\n" : "")
-            << "</" << xmlElement.tag << ">";
+        if ( hasChildren && (xmlElement.value.length() > 0) ) {
+            std::cout << "\n";
+            for ( int i = 0; i < depth + 1; i++ )
+                std::cout << spacer;
+        }
+        std::cout << xmlElement.value;
+        if ( hasChildren ) {
+            std::cout << "\n";
+            for ( int i = 0; i < depth; i++ )
+                std::cout << spacer;
+        }
+        std::cout << "</" << xmlElement.tag << ">";
     }
-    else
-        std::cout << " />"; 
 }
 
 void XMLFile::print()
 {
     if (!isLoaded_ )
         return;
-    printXMLElement( elements_ );
+    printXMLElement( elements_,0 );
 }
 
 void main()

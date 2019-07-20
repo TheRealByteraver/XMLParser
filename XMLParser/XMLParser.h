@@ -146,7 +146,7 @@ public:
     }
     bool    isLoaded() { return isLoaded_; }
     void    print();
-    void    printXMLElement( XMLElement& xmlElement );
+    void    printXMLElement( const XMLElement& xmlElement,int depth );
 
 private:
     // reads the .xml textfile into a stream of strings, returns false on error
