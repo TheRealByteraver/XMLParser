@@ -4,13 +4,25 @@
 #include <conio.h>
 #include "XMLParser.h"
 
+std::string& XMLFile::trimTrailingSpaces( std::string& trimStr )
+{
+    size_t strLen = trimStr.length ();
+    for ( ; strLen > 0; strLen-- ) {
+        if ( trimStr[strLen] != ' ' )
+            break;
+    }
+    trimStr.erase ( strLen );
+    return trimStr;
+}
+
 bool XMLFile::readFileToBuffer( 
     std::stringstream& rawData, 
     std::string& filename )
 {
     // Open the XML file
     std::ifstream xmlFile( filename.c_str() );
-    if ( !xmlFile.is_open() ) return false;
+    if ( !xmlFile.is_open() ) 
+        return false;
 
     // read the whole file into memory
     rawData << xmlFile.rdbuf();
@@ -86,7 +98,7 @@ bool XMLFile::tagIsAComment( const std::string& tagStr, bool& isValidComment )
 {
     isValidComment = false;
 
-    // make we don't trip over a leading space:
+    // make sure we don't trip over a leading space:
     std::stringstream ss( tagStr );
     std::string head;
     ss >> head;
@@ -97,23 +109,16 @@ bool XMLFile::tagIsAComment( const std::string& tagStr, bool& isValidComment )
     if ( head != COMMENT_START_MARKER )
         return false;
 
-    int endMarkerLength = std::string( COMMENT_END_MARKER ).length();
-    int tagLength = tagStr.length();
+	size_t endMarkerLength = std::string( COMMENT_END_MARKER ).length();
+    size_t tagLength = tagStr.length();
 
     // At this point it is a comment alright. If there is no end marker
-    // it is malformed and we return without setting isCommentValid to true
+    // it is malformed and we return without setting isCommentValid to true    
     std::string endMarker = tagStr.substr( tagLength - endMarkerLength );
 
     // remove trailing spaces just to be sure:
-    for ( ;;) { 
-        size_t l = endMarker.length();
-        if ( l == 0 )
-            break;
-        l--;
-        if ( endMarker[l] != ' ' )
-            break;
-        endMarker.resize( l );
-    }
+	endMarker = trimTrailingSpaces( endMarker );
+
     if ( endMarker != COMMENT_END_MARKER )
         return true; 
 
@@ -417,13 +422,13 @@ bool XMLFile::readFile()
             // XML version prolog is only allowed in the very beginning of the
             // xml file, not even a comment or whitespace can precede it
             if ( (lineNr > 0) || (precedingStr.length() > 0) ) {
-                std::cout << "\nIllegal XML version tag, exiting!\n";
+                std::cout << "\nIllegal XML version tag, exiting!\n";  // DEBUG
                 return false;
             }
             // exit if error whilst reading xml prolog tag
             XMLElement  xmlElement;
             if ( !extractTagNameAndAttributes( tagStr,xmlElement ) ) {
-                std::cout << "\nError extracting attributes, exiting!\n";
+                std::cout << "\nError extracting attributes, exiting!\n"; // DEBUG
                 return false;
             }
             for ( XMLAttribute xmlAttribute : xmlElement.attributes ) {
@@ -455,8 +460,50 @@ bool XMLFile::readFile()
         // OK so we are done with filtering prolog stuff and comments,
         // now start with reading the xml elements
         XMLElement xmlElement;
-        bool extractError = extractTagNameAndAttributes( tagStr,xmlElement );
-        if ( extractError == false )
+
+        /*
+            First, check if this tag is the start of a <![CDATA[ section.
+            CDATA sections are not allowed outside of elements, meaning
+            after the last closing tag or before the first normal opening 
+            tag. 
+            Multiple CDATA tags can occur in a single element.
+            They cannot be inside another tagname though.
+        */
+        size_t position = tagStr.find( CDATA_START_MARKER );
+        if ( position != std::string::npos ) { // it is a CDATA section!
+
+            // TODO: built in check if we found a real opening tag already!
+
+            if ( position > 0 ) { 
+                precedingStr += ' ' + tagStr.substr( 0, position );
+                tagStr = tagStr.substr( position );
+            }           
+            for ( position = std::string::npos;
+                (!rawData.eof()) && (position == std::string::npos);) {
+                std::string s;
+                rawData >> s;
+                position = tagStr.find( CDATA_END_MARKER );
+                tagStr += ' ' + s;
+            }
+            // no end marker found means error in xml file
+            if ( position == std::string::npos ) {                 
+                std::cout << "\nCDATA end marker not found, exiting!\n"; // DEBUG
+                return false;
+            }
+            position = tagStr.find( CDATA_END_MARKER );
+            size_t endPos = position + std::string( CDATA_END_MARKER ).length();
+            trailingStr = tagStr.substr( endPos ) + ' ';
+            tagStr.resize( endPos );
+
+            //std::cout << "\n@" << tagStr << "@, |" << trailingStr << "|\n";
+
+            // skip for now:
+            precedingStr = trailingStr;
+            continue;
+        }
+
+        bool extractSuccess = extractTagNameAndAttributes( tagStr,xmlElement );
+        if ( extractSuccess == false )
             return false; // exit on decoding error
 
         bool isClosingTag = tagIsAClosingTag( tagStr );
@@ -521,7 +568,7 @@ bool XMLFile::readFile()
             // remove the '/' character from the closing tag:
             std::string closingTag = xmlElement.tag.substr( 1 );
             if ( prevXMLPtr->tag != closingTag ) {
-                std::cout << "\nClosing and Opening tags do not match!";
+                std::cout << "\nClosing and Opening tags do not match!";  // DEBUG
                 return false;
             }
 
@@ -599,22 +646,17 @@ void XMLFile::print()
 
 void main()
 {
-    
     XMLFile     xmlFile( "c:\\RTSMedia\\beach-ball.svg" );
     std::cout 
         << "\nXML file was loaded correctly: "
         << (xmlFile.isLoaded() ? "yes" : "no") << "\n";
-
     xmlFile.print();
-
-
-    _getch();
+	_getch();
     
     XMLFile     xmlFile2( "c:\\RTSMedia\\purchase.xml" );
     std::cout
         << "\nXML file was loaded correctly: "
         << (xmlFile2.isLoaded() ? "yes" : "no") << "\n";
-
     xmlFile2.print();
     _getch();
 }

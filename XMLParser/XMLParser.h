@@ -2,7 +2,7 @@
     The purpose of this very simple XML parser is to be able to read .SVG 
     files, nothing more. 
     Not implemented are:
-    - reading CDATA sections 
+    - reading CDATA sections (it skips it) 
     - support for &lt; &gt; &amp; &apos; &quot;
     - namespaces
     - probably a whole lot more
@@ -15,15 +15,6 @@
     https://www.w3.org/TR/xmlschema-0/
 
 */
-
-#pragma once
-#include <string>
-#include <vector>
-#include <stack>
-#include <fstream>
-#include <sstream>
-
-
 
 /*
     Good resource: https://www.w3.org/TR/xmlschema-0/
@@ -101,27 +92,30 @@
     c-21.364,17.73-41.202,37.329-58.973,58.666c-0.111,0.133-0.223,0.262-0.352,0.417c-5.337-20.129-8.036-40.889-8.036-61.904
     C15.002,195.349,37.433,137.806,78.315,93.239z"/>
     </svg>
-
-
-
 */
 
-//#define XML_FILE_MAX_LINE_LENGTH        256
-#define TAG_START_MARKER                "<"
-#define TAG_END_MARKER                  ">"
-#define TAG_CLOSE_MARKER                "/"
-#define XML_VERSION_START_MARKER        "<?"
-#define XML_VERSION_END_MARKER          "?>"
-#define XML_SELF_CLOSING_MARKER         "/>"
-#define COMMENT_TAG_MARKER              "!"
-#define ATTRIBUTE_ASSIGNMENT_MARKER     "="
-#define ATTRIBUTE_VALUE_DELIMITER1      "'"
-#define ATTRIBUTE_VALUE_DELIMITER2      "\""
-#define COMMENT_START_MARKER            "<!--"
-#define COMMENT_END_MARKER              "-->"
-#define COMMENT_ILLEGAL_CONTENT         "--"
-#define CDATA_START_MARKER              "<![CDATA["
-#define CDATA_END_MARKER                "]]>"
+#pragma once
+#include <string>
+#include <vector>
+#include <stack>
+#include <fstream>
+#include <sstream>
+
+constexpr auto TAG_START_MARKER				= "<";
+constexpr auto TAG_END_MARKER				= ">";
+constexpr auto TAG_CLOSE_MARKER				= "/";
+constexpr auto XML_VERSION_START_MARKER		= "<?";
+constexpr auto XML_VERSION_END_MARKER		= "?>";
+constexpr auto XML_SELF_CLOSING_MARKER		= "/>";
+constexpr auto COMMENT_TAG_MARKER			= "!";
+constexpr auto ATTRIBUTE_ASSIGNMENT_MARKER	= "=";
+constexpr auto ATTRIBUTE_VALUE_DELIMITER1	= "'";
+constexpr auto ATTRIBUTE_VALUE_DELIMITER2	= "\"";
+constexpr auto COMMENT_START_MARKER			= "<!--";
+constexpr auto COMMENT_END_MARKER			= "-->";
+constexpr auto COMMENT_ILLEGAL_CONTENT		= "--";
+constexpr auto CDATA_START_MARKER			= "<![CDATA[";
+constexpr auto CDATA_END_MARKER				= "]]>";
 
 class XMLAttribute {
 public:
@@ -132,7 +126,8 @@ public:
 class XMLElement {
 public:
     std::string                 tag;
-    std::string                 value;
+    std::string                 value;  // change to std::vector< std::string > ?
+    std::vector< std::string >  cdata;  // remove?
     std::vector< XMLAttribute > attributes;
     std::vector< XMLElement >   children;
 };
@@ -149,7 +144,8 @@ public:
     void    printXMLElement( const XMLElement& xmlElement,int depth );
 
 private:
-    // reads the .xml textfile into a stream of strings, returns false on error
+	std::string& trimTrailingSpaces(std::string& trimStr);
+	// reads the .xml textfile into a stream of strings, returns false on error
     bool    readFileToBuffer( 
         std::stringstream& rawData,
         std::string& filename );
@@ -160,7 +156,7 @@ private:
         opening ( e.g. '<') marker and closing marker (e.g. '>') are included.
         The string preceding the first tag found are stored in precedingStr.
         This string may contain spaces (so more than one word).
-        The string trailingStr contains any character that immediately follow
+        The string trailingStr contains any character that immediately follow  
         the tag closing marker '>'. This string never contains spaces.
         Note that on starting this function:
         - rawData is modified (we read from it)
